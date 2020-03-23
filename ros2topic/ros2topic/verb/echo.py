@@ -82,7 +82,7 @@ class EchoVerb(VerbExtension):
         parser.add_argument(
             '--no-str', action='store_true', help="Don't print string fields of messages")
         parser.add_argument(
-            '--raw', action='store_true', help="Echo the raw binary representation")
+            '--raw', action='store_true', help='Echo the raw binary representation')
 
     def main(self, *, args):
         return main(args)
