@@ -81,6 +81,8 @@ class EchoVerb(VerbExtension):
             '--no-arr', action='store_true', help="Don't print array fields of messages")
         parser.add_argument(
             '--no-str', action='store_true', help="Don't print string fields of messages")
+        parser.add_argument(
+            '--raw', action='store_true', help="Echo the raw binary representation")
 
     def main(self, *, args):
         return main(args)
@@ -97,7 +99,7 @@ def main(args):
         args.qos_profile, reliability=args.qos_reliability, durability=args.qos_durability)
     with DirectNode(args) as node:
         subscriber(
-            node.node, args.topic_name, args.message_type, callback, qos_profile)
+            node.node, args.topic_name, args.message_type, callback, qos_profile, args.raw)
 
 
 def handle_incompatible_qos_event(event):
@@ -110,7 +112,8 @@ def subscriber(
     topic_name: str,
     message_type: MsgType,
     callback: Callable[[MsgType], Any],
-    qos_profile: QoSProfile
+    qos_profile: QoSProfile,
+    raw: bool
 ) -> Optional[str]:
     """Initialize a node with a single subscription and spin."""
     if message_type is None:
@@ -142,9 +145,9 @@ def subscriber(
         incompatible_qos=handle_incompatible_qos_event)
     try:
         node.create_subscription(
-            msg_module, topic_name, callback, qos_profile, event_callbacks=subscription_callbacks)
+            msg_module, topic_name, callback, qos_profile, event_callbacks=subscription_callbacks, raw=raw)
     except UnsupportedEventTypeError:
-        node.create_subscription(msg_module, topic_name, callback, qos_profile)
+        node.create_subscription(msg_module, topic_name, callback, qos_profile, raw=raw)
 
     rclpy.spin(node)
 
