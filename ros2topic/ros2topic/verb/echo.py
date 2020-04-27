@@ -27,7 +27,9 @@ from rclpy.qos_event import SubscriptionEventCallbacks
 from rclpy.qos_event import UnsupportedEventTypeError
 from rclpy.validate_full_topic_name import validate_full_topic_name
 from ros2cli.node.direct import DirectNode
+from ros2cli.node.strategy import NodeStrategy
 from ros2topic.api import add_qos_arguments_to_argument_parser
+from ros2topic.api import get_msg_class
 from ros2topic.api import get_topic_names_and_types
 from ros2topic.api import qos_profile_from_short_keys
 from ros2topic.api import TopicNameCompleter
@@ -95,15 +97,19 @@ def main(args):
         callback = subscriber_cb_csv(truncate_length, args.no_arr, args.no_str)
     qos_profile = qos_profile_from_short_keys(
         args.qos_profile, reliability=args.qos_reliability, durability=args.qos_durability)
+    if args.message_type is None:
+        with NodeStrategy(args) as node:
+            message_type = get_msg_class(node, args.topic_name, include_hidden_topics=True)
+    else:
+        message_type = get_message(args.message_type)
     with DirectNode(args) as node:
         subscriber(
-            node.node, args.topic_name, args.message_type, callback, qos_profile)
+            node, args.topic_name, message_type, callback, qos_profile)
 
 
 def handle_incompatible_qos_event(event):
     incompatible_qos_name = qos_policy_name_from_kind(event.last_policy_kind)
     print(f'Incompatible QoS Policy detected: {incompatible_qos_name}')
-
 
 def subscriber(
     node: Node,
@@ -113,36 +119,11 @@ def subscriber(
     qos_profile: QoSProfile
 ) -> Optional[str]:
     """Initialize a node with a single subscription and spin."""
-    if message_type is None:
-        topic_names_and_types = get_topic_names_and_types(node=node, include_hidden_topics=True)
-        try:
-            expanded_name = expand_topic_name(topic_name, node.get_name(), node.get_namespace())
-        except ValueError as e:
-            raise RuntimeError(e)
-        try:
-            validate_full_topic_name(expanded_name)
-        except rclpy.exceptions.InvalidTopicNameException as e:
-            raise RuntimeError(e)
-        for n, t in topic_names_and_types:
-            if n == expanded_name:
-                if len(t) > 1:
-                    raise RuntimeError(
-                        "Cannot echo topic '%s', as it contains more than one type: [%s]" %
-                        (topic_name, ', '.join(t))
-                    )
-                message_type = t[0]
-                break
-        else:
-            raise RuntimeError(
-                'Could not determine the type for the passed topic')
-
-    msg_module = get_message(message_type)
-
     subscription_callbacks = SubscriptionEventCallbacks(
         incompatible_qos=handle_incompatible_qos_event)
     try:
         node.create_subscription(
-            msg_module, topic_name, callback, qos_profile, event_callbacks=subscription_callbacks)
+            message_type, topic_name, callback, qos_profile, event_callbacks=subscription_callbacks)
     except UnsupportedEventTypeError:
         node.create_subscription(msg_module, topic_name, callback, qos_profile)
 
